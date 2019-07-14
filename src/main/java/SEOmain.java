@@ -1,4 +1,3 @@
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,8 +34,7 @@ public class SEOmain extends Configured implements Tool {
 
             try {
                 host = new URI(splits[1]).getHost();
-            }
-            catch (URISyntaxException e) {
+            } catch (URISyntaxException e) {
                 return;
             }
 
@@ -54,8 +52,8 @@ public class SEOmain extends Configured implements Tool {
         }
     }
 
-    public static class SeoGrouper extends WritableComparator {
-        protected SeoGrouper() {
+    public static class SEOComparatorGroup extends WritableComparator {
+        protected SEOComparatorGroup() {
             super(SEOcomposite.class, true);
         }
 
@@ -65,9 +63,9 @@ public class SEOmain extends Configured implements Tool {
         }
     }
 
-    public static class SeoComparator extends WritableComparator {
+    public static class SEOComparatorSort extends WritableComparator {
 
-        SeoComparator() {
+        SEOComparatorSort() {
             super(SEOcomposite.class, true);
         }
 
@@ -77,7 +75,7 @@ public class SEOmain extends Configured implements Tool {
         }
     }
 
-    public static class SEOreduceer extends Reducer<SEOcomposite, NullWritable, Text, IntWritable> {
+    public static class SEOreducer extends Reducer<SEOcomposite, NullWritable, Text, IntWritable> {
 
         @Override
         public void reduce(SEOcomposite pair, Iterable<NullWritable> nulls, Context context) throws IOException, InterruptedException {
@@ -121,7 +119,7 @@ public class SEOmain extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
         if (args.length != 2) {
-            System.out.println("Two parameters are required for SeoMain");
+            System.out.println("Two parameters are required!");
             return -1;
         }
 
@@ -129,31 +127,31 @@ public class SEOmain extends Configured implements Tool {
         if (fs.exists(new Path(args[1]))) {
             fs.delete(new Path(args[1]), true);
         }
-
+        System.out.println("11111111111111111111111111");
         Job job = Job.getInstance(getConf());
         job.setJobName("SEO_OPTIMIZATION");
 
         job.setJarByClass(SEOmain.class);
-
+        System.out.println("22222222222222222222222222");
         FileInputFormat.setInputPaths(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
+        System.out.println("33333333333333333333333333");
         job.setMapperClass(SEOmapper.class);
         job.setMapOutputKeyClass(SEOcomposite.class);
         job.setMapOutputValueClass(NullWritable.class);
-
+        System.out.println("44444444444444444444444444");
         job.setPartitionerClass(SEOpartitioner.class);
-        job.setSortComparatorClass(SeoComparator.class);
-        job.setGroupingComparatorClass(SeoGrouper.class);
-
-        job.setReducerClass(SEOreduceer.class);
+        job.setSortComparatorClass(SEOComparatorSort.class);
+        job.setGroupingComparatorClass(SEOComparatorGroup.class);
+        System.out.println("55555555555555555555555555");
+        job.setReducerClass(SEOreducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
-
+        System.out.println("66666666666666666666666666");
         job.setNumReduceTasks(Config.REDUCE_COUNT);
-
+        System.out.println("77777777777777777777777777");
         boolean success = job.waitForCompletion(true);
-
+        System.out.println(success);
         return success ? 0 : 1;
     }
 }
