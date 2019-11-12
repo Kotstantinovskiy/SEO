@@ -17,11 +17,10 @@ import java.net.URISyntaxException;
 
 public class SEOmain extends Configured implements Tool {
 
-    public static class SEOmapper extends Mapper<LongWritable, Text, SEOcomposite, NullWritable> {
+    public static class SEOmapper_1 extends Mapper<LongWritable, Text, Text, IntWritable> {
 
         @Override
         public void map(LongWritable key, Text host_query, Context context) throws IOException, InterruptedException {
-            System.out.println("Start mapper");
             String host_query_str = host_query.toString();
             String[] splits = host_query_str.split("\t");
 
@@ -29,9 +28,8 @@ public class SEOmain extends Configured implements Tool {
                 return;
             }
 
-            String host;
             String query = splits[0];
-
+            String host;
             try {
                 host = new URI(splits[1]).getHost();
             } catch (URISyntaxException e) {
@@ -41,14 +39,51 @@ public class SEOmain extends Configured implements Tool {
             if(host == null) {
                 return;
             }
-            context.write(new SEOcomposite(host, query), NullWritable.get());
+
+            context.write(new Text(host + "\t" + query), new IntWritable(1));
         }
     }
 
-    public static class SEOpartitioner extends Partitioner<SEOcomposite, NullWritable> {
+    public static class SEOreducer_1 extends Reducer<Text, IntWritable, Text, IntWritable> {
+
         @Override
-        public int getPartition(SEOcomposite key, NullWritable val, int numPartitions) {
-            return Math.abs(key.getUrl().hashCode()) % numPartitions;
+        public void reduce(Text host_query, Iterable<IntWritable> ones, Context context) throws IOException, InterruptedException {
+
+            int n = 0;
+            for(IntWritable a : ones) {
+                n++;
+            }
+
+            if (n >= context.getConfiguration().getLong(Config.MIN_CLICKS, 1)) {
+                context.write(new Text(host_query), new IntWritable(n));
+            }
+        }
+    }
+
+    public static class SEOmapper_2 extends Mapper<LongWritable, Text, SEOcomposite, Text> {
+
+        @Override
+        public void map(LongWritable key, Text host_query_num, Context context) throws IOException, InterruptedException {
+            System.out.println("Start mapper");
+            String host_query_num_str = host_query_num.toString();
+            String[] splits = host_query_num_str.split("\t");
+
+            if(splits.length != 3){
+                return;
+            }
+
+            String host = splits[0];
+            String query = splits[1];
+            int num = Integer.valueOf(splits[2]);
+
+            context.write(new SEOcomposite(host, num), new Text(query));
+        }
+    }
+
+    public static class SEOpartitioner extends Partitioner<SEOcomposite, Text> {
+        @Override
+        public int getPartition(SEOcomposite key, Text val, int numPartitions) {
+            return Math.abs(key.getHost().hashCode()) % numPartitions;
         }
     }
 
@@ -59,7 +94,7 @@ public class SEOmain extends Configured implements Tool {
 
         @Override
         public int compare(WritableComparable a, WritableComparable b) {
-            return ((SEOcomposite) a).getUrl().compareTo(((SEOcomposite) b).getUrl());
+            return ((SEOcomposite) a).getHost().compareTo(((SEOcomposite) b).getHost());
         }
     }
 
@@ -75,38 +110,12 @@ public class SEOmain extends Configured implements Tool {
         }
     }
 
-    public static class SEOreducer extends Reducer<SEOcomposite, NullWritable, Text, IntWritable> {
+    public static class SEOreducer_2 extends Reducer<SEOcomposite, Text, Text, IntWritable> {
 
         @Override
-        public void reduce(SEOcomposite pair, Iterable<NullWritable> nulls, Context context) throws IOException, InterruptedException {
+        public void reduce(SEOcomposite key, Iterable<Text> queries, Context context) throws IOException, InterruptedException {
             System.out.println("Start reducer");
-            String bestQuery = "", currentQuery = "";
-            int currentCounter = 0, bestCounter = 0;
-            String url = pair.getUrl().toString();
-
-            for(NullWritable a : nulls) {
-                String query = pair.getQuery().toString();
-
-                if(bestQuery.equals("")) {
-                    bestQuery = query;
-                }
-
-                if(!query.equals(currentQuery)) {
-                    currentQuery = query;
-                    currentCounter = 1;
-                }
-
-                currentCounter++;
-
-                if(currentCounter > bestCounter) {
-                    bestCounter = currentCounter;
-                    bestQuery = currentQuery;
-                }
-            }
-
-            if (bestCounter >= context.getConfiguration().getLong(Config.MIN_CLICKS, 1)) {
-                context.write(new Text(url + "\t" + bestQuery), new IntWritable(bestCounter));
-            }
+            context.write(new Text(key.getHost().toString() + "\t" + queries.iterator().next().toString()), key.getNum());
         }
     }
 
@@ -127,31 +136,51 @@ public class SEOmain extends Configured implements Tool {
         if (fs.exists(new Path(args[1]))) {
             fs.delete(new Path(args[1]), true);
         }
-        System.out.println("11111111111111111111111111");
         Job job = Job.getInstance(getConf());
-        job.setJobName("SEO_OPTIMIZATION");
+        job.setJobName("SEO_OPTIMIZATION_STEP_1");
 
         job.setJarByClass(SEOmain.class);
-        System.out.println("22222222222222222222222222");
         FileInputFormat.setInputPaths(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-        System.out.println("33333333333333333333333333");
-        job.setMapperClass(SEOmapper.class);
+        FileOutputFormat.setOutputPath(job, new Path(args[1] + "/tmp"));
+
+        job.setMapperClass(SEOmapper_1.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(IntWritable.class);
+
+        job.setReducerClass(SEOreducer_1.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        job.setNumReduceTasks(Config.REDUCE_COUNT);
+
+        boolean success = job.waitForCompletion(true);
+
+        if(!success)
+            return 0;
+        //---------------------------------------------------------------
+        job = Job.getInstance(getConf());
+        job.setJobName("SEO_OPTIMIZATION_STEP_2");
+
+        job.setJarByClass(SEOmain.class);
+        FileInputFormat.setInputPaths(job, new Path(args[1] + "/tmp"));
+        FileOutputFormat.setOutputPath(job, new Path(args[1] + "/out"));
+
+        job.setMapperClass(SEOmapper_2.class);
         job.setMapOutputKeyClass(SEOcomposite.class);
-        job.setMapOutputValueClass(NullWritable.class);
-        System.out.println("44444444444444444444444444");
+        job.setMapOutputValueClass(Text.class);
+
         job.setPartitionerClass(SEOpartitioner.class);
         job.setSortComparatorClass(SEOComparatorSort.class);
         job.setGroupingComparatorClass(SEOComparatorGroup.class);
-        System.out.println("55555555555555555555555555");
-        job.setReducerClass(SEOreducer.class);
+
+        job.setReducerClass(SEOreducer_2.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
-        System.out.println("66666666666666666666666666");
+
         job.setNumReduceTasks(Config.REDUCE_COUNT);
-        System.out.println("77777777777777777777777777");
-        boolean success = job.waitForCompletion(true);
-        System.out.println(success);
+
+        success = job.waitForCompletion(true);
+        fs.delete(new Path(args[1] + "/tmp"), true);
         return success ? 0 : 1;
     }
 }

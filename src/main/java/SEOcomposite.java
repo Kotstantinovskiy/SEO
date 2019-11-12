@@ -1,30 +1,32 @@
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 
+import javax.annotation.Nonnull;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 public class SEOcomposite implements WritableComparable<SEOcomposite> {
-    private Text url;
-    private Text query;
+    private Text host;
+    private IntWritable num;
 
-    public SEOcomposite() {
-        this.url = new Text("");
-        this.query = new Text("");
+    SEOcomposite() {
+        this.host = new Text("");
+        this.num = new IntWritable(0);
     }
 
-    SEOcomposite(String url, String query) {
-        this.url = new Text(url);
-        this.query = new Text(query);
+    SEOcomposite(String host, int num) {
+        this.host = new Text(host);
+        this.num = new IntWritable(num);
     }
 
     @Override
-    public int compareTo(SEOcomposite o) {
-        int cmp = this.url.toString().compareTo(o.getUrl().toString());
+    public int compareTo(@Nonnull SEOcomposite o) {
+        int cmp = this.host.toString().compareTo(o.getHost().toString());
 
         if(cmp == 0) {
-            return query.toString().compareTo(o.getQuery().toString());
+            return Integer.compare(this.num.get(), o.getNum().get());
         }
         else {
             return cmp;
@@ -33,48 +35,48 @@ public class SEOcomposite implements WritableComparable<SEOcomposite> {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        url.write(out);
-        query.write(out);
+        this.host.write(out);
+        this.num.write(out);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        url.readFields(in);
-        query.readFields(in);
+        this.host.readFields(in);
+        this.num.readFields(in);
     }
 
     @Override
     public int hashCode() {
-        return url.hashCode() * 163 + query.hashCode();
+        return host.hashCode() * 179 + num.hashCode();
     }
 
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof SEOcomposite) {
-            SEOcomposite p = (SEOcomposite) obj;
-            return url.equals(p.url) && query.equals(p.query);
+            SEOcomposite tmp = (SEOcomposite) obj;
+            return (host.equals(tmp.host)) && (num.get() == tmp.num.get());
         }
         return false;
     }
 
     @Override
     public String toString() {
-        return url + "\t" + query;
+        return host + "\t" + String.valueOf(num);
     }
 
-    public Text getUrl() {
-        return url;
+    public Text getHost() {
+        return this.host;
     }
 
-    public void setUrl(Text url) {
-        this.url = url;
+    public void setHost(Text host) {
+        this.host = host;
     }
 
-    public Text getQuery() {
-        return query;
+    public IntWritable getNum() {
+        return this.num;
     }
 
-    public void setQuery(Text query) {
-        this.query = query;
+    public void setNum(IntWritable num) {
+        this.num = num;
     }
 }
